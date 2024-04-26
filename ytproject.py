@@ -2,6 +2,7 @@ from googleapiclient.discovery import build
 import mysql.connector
 import pandas as pd
 import streamlit as st
+from streamlit_navigation_bar import st_navbar
 from datetime import datetime
 from dateutil import parser
 
@@ -9,18 +10,15 @@ conn = mysql.connector.connect(
     host="127.0.0.1",
     user="root",
     password="Gayujana123@",
-    database="datas"
+    database="youtube"
 )
-cursor = conn.cursor()
+mycursor = conn.cursor()
 
 api='AIzaSyC2kpfJAyrzCfQ4ociuNCA91DfILmmPknc'
-def Api_connect():
-    api_service_name="youtube"
-    api_version="v3"
-    youtube=build(api_service_name,api_version,developerKey=api)
-    return youtube
+api_service_name="youtube"
+api_version="v3"
+youtube=build(api_service_name,api_version,developerKey=api)
 
-youtube=Api_connect()
 
 def get_channel_details(channel_id):
     request = youtube.channels().list(
@@ -144,38 +142,63 @@ def get_comment_details(video_ids):
         pass
     return  comment_details
 
+def get_playlist_details(channel_id):
+    next_page_token = None
+    all_data = []
+    while True:
+        request = youtube.playlists().list(
+            part='snippet,contentDetails',
+            channelId=channel_id,
+            maxResults=50,
+            pageToken=next_page_token
+        )
+        response = request.execute()
+        for item in response.get('items', []): 
+            data = {
+                'Playlist_Id': item['id'],
+                'Title': item['snippet']['title'],
+                'Channel_Id': item['snippet']['channelId'],
+                'Channel_Name': item['snippet']['channelTitle'],
+                'PublishedAt': item['snippet']['publishedAt'],
+                'Video_Count': item['contentDetails']['itemCount']
+            }
+            all_data.append(data)
+        next_page_token = response.get('nextPageToken')  
+        if not next_page_token:
+            break
+    return all_data
+
 #Creating Tables in MYSQL
 def create_tables():
-    cursor.execute("Create Table IF NOT EXISTS Channel (channel_id varchar(255) PRIMARY KEY, channel_name varchar(255) NOT NULL, sub_count int, channel_views int, channel_description text,channel_status varchar(255))")
-    cursor.execute("Create Table IF NOT EXISTS Video (video_id varchar(255) PRIMARY KEY, channel_id varchar(255) NOT NULL, video_name varchar(255), video_description text, published_date datetime, view_count int, like_count int, favorite_count int, comment_count int, duration int, thumbnail varchar(255), caption_status varchar(255), FOREIGN KEY (channel_id) REFERENCES Channel(channel_id))")
-    cursor.execute("Create Table IF NOT EXISTS Comment (comment_id varchar(255) PRIMARY KEY, video_id varchar(255) NOT NULL,comment_text text, comment_author varchar(255),comment_published_date datetime,FOREIGN KEY (video_id) REFERENCES Video(video_id))")
+    mycursor.execute("Create Table IF NOT EXISTS Channel (channel_id varchar(255) PRIMARY KEY, channel_name varchar(255) NOT NULL, sub_count int, channel_views int, channel_description text,channel_status varchar(255))")
+    mycursor.execute("Create Table IF NOT EXISTS Video (video_id varchar(255) PRIMARY KEY, channel_id varchar(255) NOT NULL, video_name varchar(255), video_description text, published_date datetime, view_count int, like_count int, favorite_count int, comment_count int, duration int, thumbnail varchar(255), caption_status varchar(255), FOREIGN KEY (channel_id) REFERENCES Channel(channel_id))")
+    mycursor.execute("Create Table IF NOT EXISTS Comment (comment_id varchar(255) PRIMARY KEY, video_id varchar(255) NOT NULL,comment_text text, comment_author varchar(255),comment_published_date datetime,FOREIGN KEY (video_id) REFERENCES Video(video_id))")
+    mycursor.execute("CREATE TABLE IF NOT EXISTS Playlist ( Playlist_Id VARCHAR(100) PRIMARY KEY, Title VARCHAR(100), Channel_Id VARCHAR(100), Channel_Name VARCHAR(100), PublishedAt TIMESTAMP, Video_Count INT)")
     conn.commit()
 
-#Viewing tables in Streamlit
-def show_table(table):    
-    if(table == ':blue[Channels]'):
-        show_channel_table()        
-    elif(table == ':blue[Videos]'):
-        show_video_table()
-    elif(table == ':blue[Comments]'):
-        show_comment_table()
 
 def show_channel_table():
-    cursor.execute('Select * from Channel')
-    myResult = cursor.fetchall()
-    df = pd.DataFrame(data = myResult, columns = cursor.column_names)
+    mycursor.execute('Select * from Channel')
+    myResult = mycursor.fetchall()
+    df = pd.DataFrame(data = myResult, columns = mycursor.column_names)
     st.table(df)
 
 def show_video_table():
-    cursor.execute('Select * from Video')
-    myResult = cursor.fetchall()
-    df = pd.DataFrame(data = myResult, columns = cursor.column_names)
+    mycursor.execute('Select * from Video')
+    myResult = mycursor.fetchall()
+    df = pd.DataFrame(data = myResult, columns = mycursor.column_names)
     st.table(df)
 
 def show_comment_table():
-    cursor.execute('Select * from Comment')
-    myResult = cursor.fetchall()
-    df = pd.DataFrame(data = myResult, columns = cursor.column_names)
+    mycursor.execute('Select * from Comment')
+    myResult = mycursor.fetchall()
+    df = pd.DataFrame(data = myResult, columns = mycursor.column_names)
+    st.table(df)
+
+def show_playlist_table():
+    mycursor.execute('Select * from Playlist')
+    myResult = mycursor.fetchall()
+    df = pd.DataFrame(data = myResult, columns = mycursor.column_names)
     st.table(df)
 
 # Inserting data to MYSQL
@@ -183,15 +206,24 @@ def insert_all_table(channel_id):
     insert_channel_details(channel_id) 
     insert_video_details(channel_id) 
     insert_comment_details(channel_id)
+    playlist_data = get_playlist_details(channel_id)
+    insert_playlist_details(playlist_data)
           
 def insert_channel_details(channel_id):
     channel_details = get_channel_details(channel_id)
     channel_details = (channel_details['channel_id'],channel_details['channel_name'],channel_details['sub_count'],channel_details['view_count'],channel_details['channel_description'],channel_details['channel_status'],)
     insert_query = '''INSERT INTO Channel 
                     VALUES(%s,%s,%s,%s,%s,%s)''' 
-    cursor.execute(insert_query,channel_details)
-    conn.commit()
-    print(cursor.rowcount,'rows inserted successfully')
+    
+    check_query = '''SELECT channel_id FROM Channel WHERE channel_id = %s'''
+    mycursor.execute(check_query, (channel_details[0],))
+    existing_channel = mycursor.fetchone()
+    if existing_channel:
+        print("Channel already exists in the database.")
+    else:
+        mycursor.execute(insert_query,channel_details)
+        conn.commit()
+        print(mycursor.rowcount,'rows inserted successfully')
 
 def insert_video_details(channel_id):
     try:
@@ -201,7 +233,7 @@ def insert_video_details(channel_id):
             video_detail = (video_detail['video_id'],video_detail['channel_id'],video_detail['video_name'],video_detail['video_description'],video_detail['published_date'],video_detail['view_count'],video_detail['like_count'],video_detail['favorite_count'],video_detail['comment_count'],video_detail['duration'],video_detail['thumbnail'],video_detail['caption_status'])
             insert_query = '''INSERT INTO Video 
             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'''
-            cursor.execute(insert_query,video_detail)
+            mycursor.execute(insert_query,video_detail)
             conn.commit()
     except Exception as err:
         print(err)        
@@ -217,83 +249,106 @@ def insert_comment_details(channel_id):
             comment_detail = (comment_detail['comment_id'],comment_detail['video_id'],comment_detail['comment_text'],comment_detail['comment_author'],comment_detail['comment_published_date'])
             insert_query = '''INSERT INTO Comment 
             VALUES(%s,%s,%s,%s,%s)''' 
-            cursor.execute(insert_query,comment_detail)
+            mycursor.execute(insert_query,comment_detail)
             conn.commit()
     except Exception as err:
         print(err) 
         pass
 
-# Navigation
-with st.sidebar:
-    option = st.selectbox('Select an option:', ("Home","Add Data to Database","View Tables","SQL Query"))
 
-st.markdown(
-    """
-    <style>
-    body {
-        background-color: grey;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-st.write(":Green[Welcome to Youtube Harvesting]")  
-if option == 'Home':
-    st.subheader(":black[Provide Channel ID]")
-    channel_id = st.text_input('Channel ID]"',label_visibility = 'collapsed')
-    
-    if st.button (' :Maroon[View Channel Details]'):
-        try:
-            df = get_channel_details(channel_id)
-            st.dataframe(df)
-        except:
-            st.warning('Enter a valid Channel ID')
-
-    if st.button(':green[View Video Details]'):
-        try:
-            with st.spinner('Getting Details...'):
-                video_ids = get_video_ids(channel_id)
-                df = get_video_details(video_ids)
-                st.dataframe(df)
-        except: 
-            st.warning('Enter a valid Channel ID')
-
-#Add Data to Database Streamlit           
-elif option == 'Add Data to Database':
-    st.subheader(":black[Provide Channel ID]")
-    channel_id = st.text_input(' Enter Channel Id', label_visibility = 'collapsed')
-    if st.button(':green[Collect and Store Channel data]'):        
-        create_tables()
-        ch_ids = []
-        cursor.execute('Select channel_id from Channel')
-        myResult = cursor.fetchall()   
-        
-        for i in myResult:
-            ch_ids.append(i[0])
-        if(channel_id in ch_ids):
-            st.success('Channel Data already Available in SQL')
-        elif(channel_id == ''):
-            st.warning('Invalid Channel Id')
+def insert_playlist_details(playlist_data):
+    try:
+        insert_query = '''INSERT IGNORE INTO Playlist (Playlist_Id, Title, Channel_Id, Channel_Name, PublishedAt, Video_Count)
+                          VALUES (%s, %s, %s, %s, %s, %s)'''
+        for playlist_item in playlist_data:
+            published_at = datetime.strptime(playlist_item['PublishedAt'], '%Y-%m-%dT%H:%M:%SZ').strftime('%Y-%m-%d %H:%M:%S')
+            mycursor.execute(insert_query, (
+                playlist_item['Playlist_Id'],
+                playlist_item['Title'],
+                playlist_item['Channel_Id'],
+                playlist_item['Channel_Name'],
+                published_at,  
+                playlist_item['Video_Count']
+            ))
+        conn.commit()
+    except mysql.connector.Error as err:
+        if err.errno == 1062:
+            print("Duplicate entry. Skipping...")
         else:
-            with st.spinner('Loading....'):
-                try:
-                    insert_all_table(channel_id)
-                    st.success('Data has been inserted')
-                except:
-                    
-                    st.warning('Invalid Channel Id')  
-# View Tables in Streamlit
-elif option == 'View Tables':
-    st.subheader(":black[Select the table to be viewed from SQL Database :sunglasses:]")
-    view_table = st.radio('Select the table to view from MySql',
-                          [':blue[Channels]',':blue[Videos]',':blue[Comments]'],
-                          label_visibility = 'collapsed',horizontal = True)
-    show_table(view_table)
+            print("Error:", err)
+    except Exception as err:
+        print("Error:", err)
 
-#SQL Query to be displayed in Streamlit
-elif option == 'SQL Query':
-    st.subheader(" :black[Please select a query to execute]")
-    questions = st.selectbox(':blue[Queries]',
+
+page_bg_img = f"""
+<style>
+[data-testid="stAppViewContainer"] > .main {{
+background-image: url("https://img.freepik.com/free-vector/beige-blurred-background_1034-247.jpg");
+background-size: cover;
+background-position: center center;
+background-repeat: no-repeat;
+background-attachment: local;
+}}
+[data-testid="stHeader"] {{
+background: rgba(0,0,0,0);
+}}
+</style>
+"""
+st.markdown(page_bg_img, unsafe_allow_html=True)
+pages = ["Home", "Add Data to Database", "View Tables", "SQL Query"]
+styles = {
+    "nav": {
+        "background-color": "#7BD192",
+    },
+    "div": {
+        "max-width": "32rem",
+    },
+    "span": {
+        "border-radius": "0.5rem",
+        "padding": "0.4375rem 0.625rem",
+        "margin": "0 0.125rem",
+    },
+    "active": {
+        "background-color": "rgba(255, 255, 255, 0.25)",
+    },
+    "hover": {
+        "background-color": "rgba(255, 255, 255, 0.35)",
+    },
+}
+
+page = st_navbar(pages, styles=styles)
+st.write(page)
+
+# Page content
+if page == "Home":
+    st.markdown("<h1 style='color: green;'>Welcome to YouTube Harvesting project!!!</h1>", unsafe_allow_html=True)
+    st.write("""
+             YouTube data harvesting and warehousing using Python and Streamlit involves using the YouTube Data API to fetch data like video details, channel information, comments, and playlists. This data is then processed, cleaned, and transformed before being stored in a MySQL database using Mysql-connector. Display it in streamlit web applications After fetching data in mysql database.
+             """)
+
+elif page == "Add Data to Database":
+    st.subheader("Provide Channel ID")
+    channel_id = st.text_input("Channel ID")
+    if st.button("Collect & Store Channel data"):
+        insert_all_table(channel_id)
+
+elif page == "View Tables":
+    st.subheader("Select the table to be viewed from SQL Database")
+    view_table = st.selectbox("Select the table to view from MySql", ["Channels", "Videos", "Comments","Playlist"])
+    if view_table == "Channels":
+        show_channel_table()
+    elif view_table == "Videos":
+        show_video_table()
+    elif view_table == "Comments":
+        show_comment_table()
+    elif view_table == "Playlist":
+        show_playlist_table()
+
+
+
+elif page == "SQL Query":
+    st.subheader("Please select a query to execute")
+    questions = st.selectbox(':Maroon[Queries]',
                             ['1. What are the names of all the videos and their corresponding channels?',
                             '2. Which channels have the most number of videos, and how many videos do they have?',
                             '3. What are the top 10 most viewed videos and their respective channels?',
@@ -306,92 +361,92 @@ elif option == 'SQL Query':
                             '10. Which videos have the highest number of comments, and what are their corresponding channel names?'])
 
     if questions == '1. What are the names of all the videos and their corresponding channels?':
-        cursor.execute('''SELECT Video.video_name AS Video_Title,Channel.channel_name AS Channel_Name FROM Video
+        mycursor.execute('''SELECT Video.video_name AS Video_Title,Channel.channel_name AS Channel_Name FROM Video
                             LEFT JOIN Channel
                             ON Video.channel_id = Channel.channel_id;
                             ''')
-        df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
+        df = pd.DataFrame(mycursor.fetchall(), columns= mycursor.column_names)
         st.write(df)
 
     elif questions == '2. Which channels have the most number of videos, and how many videos do they have?':
-        cursor.execute("""SELECT Channel.channel_name Channel_Name,COUNT(Video.video_id) AS Video_Count FROM Video
+        mycursor.execute("""SELECT Channel.channel_name Channel_Name,COUNT(Video.video_id) AS Video_Count FROM Video
                             RIGHT JOIN Channel
                             ON Video.channel_id = Channel.channel_id
                             GROUP BY channel.channel_id
                             ORDER BY video_count DESC;
                             """)
-        df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
+        df = pd.DataFrame(mycursor.fetchall(), columns= mycursor.column_names)
         st.write(df)
 
     elif questions == '3. What are the top 10 most viewed videos and their respective channels?':
-        cursor.execute("""SELECT  Channel.channel_name Channel_Name, Video.view_count View_Count, Video.video_name Video_Name FROM Video
+        mycursor.execute("""SELECT  Channel.channel_name Channel_Name, Video.view_count View_Count, Video.video_name Video_Name FROM Video
                             RIGHT JOIN Channel
                             ON Video.channel_id = Channel.channel_id
                             ORDER BY view_count DESC
                             LIMIT 10;
                             """)
-        df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
+        df = pd.DataFrame(mycursor.fetchall(), columns= mycursor.column_names)
         st.write(df)
 
     elif questions == '4. How many comments were made on each video, and what are their corresponding video names?':
-        cursor.execute("""SELECT Video.video_id Video_Id, video.video_name Video_Name,COUNT(comment_id) AS Comment_Count FROM Comment
+        mycursor.execute("""SELECT Video.video_id Video_Id, video.video_name Video_Name,COUNT(comment_id) AS Comment_Count FROM Comment
                             LEFT JOIN Video
                             ON Comment.video_id = Video.video_id
                             GROUP BY Video.video_id
                             ORDER BY comment_count DESC;
                             """)
-        df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
+        df = pd.DataFrame(mycursor.fetchall(), columns= mycursor.column_names)
         st.write(df)
 
     elif questions == '5. Which videos have the highest number of likes, and what are their corresponding channel names?':
-        cursor.execute("""SELECT  Channel.channel_name Channel_Name, Video.like_count Likes, Video.video_name Video_Name FROM Video
+        mycursor.execute("""SELECT  Channel.channel_name Channel_Name, Video.like_count Likes, Video.video_name Video_Name FROM Video
                             RIGHT JOIN Channel
                             ON Video.channel_id = Channel.channel_id
                             ORDER BY like_count DESC;
                             """)
-        df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
+        df = pd.DataFrame(mycursor.fetchall(), columns= mycursor.column_names)
         st.write(df)
     
     elif questions == '6. What is the total number of likes and dislikes for each video, and what are their corresponding video names?':
-        cursor.execute("""SELECT video_name Video_Name, like_count Likes FROM Video
+        mycursor.execute("""SELECT video_name Video_Name, like_count Likes FROM Video
                             ORDER BY like_count DESC;
                             """)
-        df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
+        df = pd.DataFrame(mycursor.fetchall(), columns= mycursor.column_names)
         st.write(df)
 
     elif questions == '7. What is the total number of views for each channel, and what are their corresponding channel names?':
-        cursor.execute("""SELECT channel_name Channel_Name, channel_views AS View_Count
+        mycursor.execute("""SELECT channel_name Channel_Name, channel_views AS View_Count
                             FROM Channel
                             ORDER BY view_count DESC;""")
-        df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
+        df = pd.DataFrame(mycursor.fetchall(), columns= mycursor.column_names)
         st.write(df)
 
     elif questions == '8. What are the names of all the channels that have published videos in the year 2022?':
-        cursor.execute("""SELECT  Channel.channel_name Channel_Name,Video.video_name Video_Name ,Video.published_date Published_Date FROM Video 
+        mycursor.execute("""SELECT  Channel.channel_name Channel_Name,Video.video_name Video_Name ,Video.published_date Published_Date FROM Video 
                             LEFT JOIN Channel 
                             ON Video.channel_id = Channel.channel_id
                             WHERE Video.published_date LIKE '2022%';
                             """)
-        df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
+        df = pd.DataFrame(mycursor.fetchall(), columns= mycursor.column_names)
         st.write(df)
     
     elif questions == '9. What is the average duration of all videos in each channel, and what are their corresponding channel names?':
-        cursor.execute("""SELECT Channel.channel_name Channel_Name ,ROUND(AVG(Video.duration)/ 60,2) as 'Duration in Minutes' FROM Video
+        mycursor.execute("""SELECT Channel.channel_name Channel_Name ,ROUND(AVG(Video.duration)/ 60,2) as 'Duration in Minutes' FROM Video
                             RIGHT JOIN Channel
                             ON Video.channel_id = Channel.channel_id
                             GROUP BY channel.channel_id
-                            ORDER BY 'Duration in Minutes' DESC;
+                            ORDER BY `Duration in Minutes` DESC;
                             """)
-        df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
+        df = pd.DataFrame(mycursor.fetchall(), columns= mycursor.column_names)
         st.write(df)
     
     elif questions == '10. Which videos have the highest number of comments, and what are their corresponding channel names?':
-        cursor.execute("""SELECT Channel.channel_name Channel_Name,video.video_name Video_Name, COUNT(comment_id) AS Comment_Count FROM Comment
+        mycursor.execute("""SELECT Channel.channel_name Channel_Name,video.video_name Video_Name, COUNT(comment_id) AS Comment_Count FROM Comment
                             Left JOIN Video ON Comment.video_id = Video.video_id
                             inner JOIN CHANNEL ON Video.channel_id = Channel.channel_id
                             GROUP BY Video.video_id
                             ORDER BY comment_count DESC
                             """)
-        df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
+        df = pd.DataFrame(mycursor.fetchall(), columns= mycursor.column_names)
         st.write(df)
 
