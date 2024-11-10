@@ -280,59 +280,27 @@ def insert_playlist_details(playlist_data):
         print("Error:", err)
 
 
-page_bg_img = f"""
-<style>
-[data-testid="stAppViewContainer"] > .main {{
-background-image: url("https://img.freepik.com/free-vector/beige-blurred-background_1034-247.jpg");
-background-size: cover;
-background-position: center center;
-background-repeat: no-repeat;
-background-attachment: local;
-}}
-[data-testid="stHeader"] {{
-background: rgba(0,0,0,0);
-}}
-</style>
-"""
-st.markdown(page_bg_img, unsafe_allow_html=True)
-pages = ["Home", "Add Data to Database", "View Tables", "SQL Query"]
-styles = {
-    "nav": {
-        "background-color": "#7BD192",
-    },
-    "div": {
-        "max-width": "32rem",
-    },
-    "span": {
-        "border-radius": "0.5rem",
-        "padding": "0.4375rem 0.625rem",
-        "margin": "0 0.125rem",
-    },
-    "active": {
-        "background-color": "rgba(255, 255, 255, 0.25)",
-    },
-    "hover": {
-        "background-color": "rgba(255, 255, 255, 0.35)",
-    },
-}
+# Streamlit Part
+st.set_page_config(page_title='Industrial Resource', page_icon= 'card_file_box', layout= 'wide')
 
-page = st_navbar(pages, styles=styles)
-st.write(page)
+st.markdown("<h1 style='color: Black;'>Welcome to YouTube Harvesting project!!!</h1>", unsafe_allow_html=True)
+
+
+left, middle1, middle2, right = st.columns(4)
 
 # Page content
-if page == "Home":
-    st.markdown("<h1 style='color: green;'>Welcome to YouTube Harvesting project!!!</h1>", unsafe_allow_html=True)
+if left.button("Home", use_container_width=True):
     st.write("""
              YouTube data harvesting and warehousing using Python and Streamlit involves using the YouTube Data API to fetch data like video details, channel information, comments, and playlists. This data is then processed, cleaned, and transformed before being stored in a MySQL database using Mysql-connector. Display it in streamlit web applications After fetching data in mysql database.
              """)
 
-elif page == "Add Data to Database":
+if middle1.button("Add Data to Database", use_container_width=True):
     st.subheader("Provide Channel ID")
     channel_id = st.text_input("Channel ID")
     if st.button("Collect & Store Channel data"):
         insert_all_table(channel_id)
 
-elif page == "View Tables":
+if middle2.button("View Tables", icon="😃", use_container_width=True):
     st.subheader("Select the table to be viewed from SQL Database")
     view_table = st.selectbox("Select the table to view from MySql", ["Channels", "Videos", "Comments","Playlist"])
     if view_table == "Channels":
@@ -345,8 +313,7 @@ elif page == "View Tables":
         show_playlist_table()
 
 
-
-elif page == "SQL Query":
+if right.button("Material button", icon=":material/mood:", use_container_width=True):
     st.subheader("Please select a query to execute")
     questions = st.selectbox(':Maroon[Queries]',
                             ['1. What are the names of all the videos and their corresponding channels?',
