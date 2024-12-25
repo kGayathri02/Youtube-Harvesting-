@@ -8,11 +8,16 @@ from datetime import datetime
 from dateutil import parser
 
 
+db_host = os.getenv('DB_HOST')
+db_user = os.getenv('DB_USER')
+db_password = os.getenv('DB_PASSWORD')
+db_name = os.getenv('DB_NAME')
+
 conn = mysql.connector.connect(
-    host=st.secrets["127.0.0.1"],
-    user=st.secrets["root"],
-    password=st.secrets["Gayujana"],
-    database=st.secrets["yh"]
+    host=st.secrets["database"]["db_host"],
+    user=st.secrets["database"]["db_user"],
+    password=st.secrets["database"]["db_password"],
+    database=st.secrets["database"]["db_name"]
 )
 mycursor = conn.cursor()
 
