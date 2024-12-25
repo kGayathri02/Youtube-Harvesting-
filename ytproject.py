@@ -14,10 +14,10 @@ db_password = os.getenv('DB_PASSWORD')
 db_name = os.getenv('DB_NAME')
 
 conn = mysql.connector.connect(
-    host=st.secrets["db_host"],
-    user=st.secrets["db_user"],
-    password=st.secrets["db_password"],
-    database=st.secrets["db_name"]
+    host=st.secrets["database"]["db_host"],
+    user=st.secrets["database"]["db_user"],
+    password=st.secrets["database"]["db_password"],
+    database=st.secrets["database"]["db_name"]
 )
 mycursor = conn.cursor()
 
