@@ -9,13 +9,12 @@ from dateutil import parser
 
 
 conn = mysql.connector.connect(
-    host="127.0.0.1",
-    user="root",
-    password="Gayujana123@",
-    database="yh"
+    host=st.secrets["127.0.0.1"],
+    user=st.secrets["root"],
+    password=st.secrets["Gayujana"],
+    database=st.secrets["yh"]
 )
 mycursor = conn.cursor()
-
 
 load_dotenv() 
 
